@@ -2,17 +2,26 @@ using uPLibrary.Networking.M2Mqtt.Messages;
 using M2MqttUnity;
 using System.Collections.Generic;
 using UnityEngine;
+using UnityEngine.Events;
+using System;
+
+[Serializable]
+public class MessageUnityEvent : UnityEvent<string, string> { }
 
 public class NetworkController : M2MqttUnityClient
 {
     public string debugLog;
-    public List<string> SubscribedTopics = new List<string>();
+    public List<string> SubscribedTopics;
 
     public delegate void OnLogChangedDelegate();
     public event OnLogChangedDelegate OnLogChanged;
 
+    public List<string> AutoTopics;
+
     //message, topic
     private List<(string,string)> receivedMessages = new List<(string,string)>();
+
+    public MessageUnityEvent MessageReceivedEvent;
 
     protected override void Update()
     {
@@ -20,7 +29,7 @@ public class NetworkController : M2MqttUnityClient
         while (receivedMessages.Count > 0)
         {
             PrintToLog("Received: \"" + receivedMessages[0].Item1 + "\" from topic \"" + receivedMessages[0].Item2 + "\"");
-            //maybe we should do something else here idk
+            MessageReceivedEvent.Invoke(receivedMessages[0].Item1, receivedMessages[0].Item2);
             receivedMessages.RemoveAt(0);
         }
     }
@@ -54,11 +63,13 @@ public class NetworkController : M2MqttUnityClient
         {
             SubscribedTopics.Add(topic);
             client.Subscribe(new string[] { topic }, new byte[] { MqttMsgBase.QOS_LEVEL_EXACTLY_ONCE });
+            PrintToLog("Subbed to topic \"" + topic + "\"");
         }
     }
     public void Subscribe(string topic, int qos)
     {
         client.Subscribe(new string[] { topic }, new byte[] { System.Convert.ToByte(qos) });
+        PrintToLog("Subbed to topic \"" + topic + "\"");
     }
     public void Unsubscribe(string topic)
     {
@@ -78,6 +89,7 @@ public class NetworkController : M2MqttUnityClient
     }
     public void Publish(string msg, string topic, int qos = 1)
     {
+        if (client == null || !client.IsConnected) return; 
         client.Publish(topic, System.Text.Encoding.UTF8.GetBytes(msg), MqttMsgBase.QOS_LEVEL_EXACTLY_ONCE, false);
         PrintToLog("Publish: \""+msg+"\" to topic \""+topic+"\"");
     }
@@ -86,6 +98,7 @@ public class NetworkController : M2MqttUnityClient
     {
         string msg = System.Text.Encoding.UTF8.GetString(message);
         PrintToLog("Received: \"" + msg + "\" from topic \"" + topic + "\"");
+        MessageReceivedEvent.Invoke(msg, topic);
     }
 
     #region LoggingCallbacks
@@ -98,7 +111,12 @@ public class NetworkController : M2MqttUnityClient
     protected override void OnConnected()
     {
         base.OnConnected();
-        PrintToLog("Connected to broker on " + brokerAddress);
+        PrintToLog("OnConnected: Connected to broker on " + brokerAddress);
+        foreach (string s in AutoTopics)
+        {
+            PrintToLog("Auto Subbing to " + s);
+            Subscribe(s);
+        }
     }
     protected override void OnConnectionFailed(string errorMessage)
     {
@@ -115,7 +133,6 @@ public class NetworkController : M2MqttUnityClient
         PrintToLog("CONNECTION LOST!");
     }
     #endregion
-
 }
 
 //     Write tha code

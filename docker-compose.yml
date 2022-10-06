@@ -1,0 +1,7 @@
+version: '3.3'
+services:
+    hivemq4:
+        ports:
+            - '8080:8080'
+            - '1883:1883'
+        image: hivemq/hivemq4
